@@ -21,11 +21,18 @@ type Section struct {
 }
 
 type Field struct {
-	Key         string `json:"key"`
-	Label       string `json:"label"`
-	Type        string `json:"type"`
-	Value       any    `json:"value,omitempty"`
-	Placeholder string `json:"placeholder,omitempty"`
+	Key         string   `json:"key"`
+	Label       string   `json:"label"`
+	Type        string   `json:"type"`
+	Value       any      `json:"value,omitempty"`
+	Placeholder string   `json:"placeholder,omitempty"`
+	Options     []Option `json:"options,omitempty"` // for type "select"
+}
+
+// Option is one choice of a select field.
+type Option struct {
+	Value string `json:"value"`
+	Label string `json:"label,omitempty"`
 }
 
 type Action struct {
@@ -67,7 +74,7 @@ func (p *Plugin) manifestLocked() Manifest {
 				Title: tr(lang, "section.address"),
 				Text:  tr(lang, "section.text"),
 				Fields: []Field{
-					{Key: "provider", Label: tr(lang, "field.provider"), Type: "text", Value: p.cfg.Provider, Placeholder: "mijnafvalwijzer"},
+					{Key: "provider", Label: tr(lang, "field.provider"), Type: "select", Value: p.cfg.Provider, Options: providerOptions()},
 					{Key: "postcode", Label: tr(lang, "field.postcode"), Type: "text", Value: p.cfg.Postcode, Placeholder: "1234AB"},
 					{Key: "houseNumber", Label: tr(lang, "field.housenumber"), Type: "text", Value: p.cfg.HouseNumber, Placeholder: "12"},
 					{Key: "suffix", Label: tr(lang, "field.suffix"), Type: "text", Value: p.cfg.Suffix, Placeholder: "A"},
@@ -104,4 +111,15 @@ func (p *Plugin) manifestLocked() Manifest {
 			},
 		},
 	}
+}
+
+// providerOptions lists the supported providers for the select field, in
+// fixed order with their human names. Older ReTouch hosts render the field
+// as a text input, where the stored value keeps working as before.
+func providerOptions() []Option {
+	out := make([]Option, 0, len(providerOrder))
+	for _, key := range providerOrder {
+		out = append(out, Option{Value: key, Label: providers[key].Name})
+	}
+	return out
 }
