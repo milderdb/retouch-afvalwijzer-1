@@ -9,7 +9,8 @@ package plugin
 //
 // /playNotification plays at a FIXED firmware level: the speaker's master
 // volume does not attenuate it. Loudness is therefore baked into the PCM as
-// gain (AnnounceVolume, percent; 100 = as spoken by the TTS).
+// gain (AnnounceVolume, percent; 100 = as spoken by the TTS). The TTS clip
+// at that fixed level is loud; unset defaults to a gentler 30%.
 
 import (
 	"fmt"
@@ -28,6 +29,11 @@ import (
 )
 
 const announceRate = 48000 // /playNotification format: s16le, 48 kHz, stereo
+
+// defaultAnnounceVolume is the gain used when none is configured (0). The
+// firmware plays notifications at a fixed, fairly loud level; 30% is a
+// comfortable indoor default.
+const defaultAnnounceVolume = 30
 
 var announceMu sync.Mutex
 
@@ -110,7 +116,7 @@ func (p *Plugin) announce(pick Pickup) error {
 	vol := p.cfg.AnnounceVolume
 	p.mu.Unlock()
 	if vol <= 0 {
-		vol = 100
+		vol = defaultAnnounceVolume
 	}
 
 	text := pickupSentence(pick, time.Now(), lang)

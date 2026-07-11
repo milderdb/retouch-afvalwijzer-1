@@ -69,11 +69,11 @@ func (p *Plugin) manifestLocked() Manifest {
 	if !p.hasOLED {
 		displayText = tr(lang, "status.nooled") + " " + displayText
 	}
-	// 0 means "no gain set"; announce.go treats it as 100%, so the slider
-	// starts at the effective value.
+	// 0 means "no gain set"; announce.go plays that at defaultAnnounceVolume,
+	// so the slider starts at the effective value.
 	announceVol := p.cfg.AnnounceVolume
 	if announceVol <= 0 {
-		announceVol = 100
+		announceVol = defaultAnnounceVolume
 	}
 	return Manifest{
 		Title:  "Afvalwijzer",
