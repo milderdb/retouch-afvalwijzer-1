@@ -66,6 +66,10 @@ func fetchAfvalwijzer(ctx context.Context, c *http.Client, cfg Config) ([]Pickup
 
 type provider struct{ Name, Type, BaseURL, CompanyCode string }
 
+// providerOrder is the fixed display order for the provider select:
+// the generic default first, the Ximmio companies alphabetically after.
+var providerOrder = []string{"mijnafvalwijzer", "avalex", "circulus", "meerlanden", "twentemilieu", "waardlanden"}
+
 var providers = map[string]provider{
 	"mijnafvalwijzer": {Name: "Mijn Afvalwijzer", Type: "html"},
 	"avalex":          {Name: "Avalex", Type: "ximmio", BaseURL: "https://wasteprod2api.ximmio.com", CompanyCode: "f7a74ad1-fdbf-4a43-9f91-44644f4d4222"},
