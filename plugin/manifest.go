@@ -21,10 +21,11 @@ type Section struct {
 }
 
 type Field struct {
-	Key   string `json:"key"`
-	Label string `json:"label"`
-	Type  string `json:"type"`
-	Value any    `json:"value,omitempty"`
+	Key         string `json:"key"`
+	Label       string `json:"label"`
+	Type        string `json:"type"`
+	Value       any    `json:"value,omitempty"`
+	Placeholder string `json:"placeholder,omitempty"`
 }
 
 type Action struct {
@@ -48,9 +49,15 @@ func (p *Plugin) manifestLocked() Manifest {
 	} else if p.cfg.Enabled {
 		status = Status{Level: "warn", Text: tr(lang, "status.loading")}
 	}
-	text := tr(lang, "section.text")
+	displayText := tr(lang, "text.display")
 	if !p.hasOLED {
-		text = tr(lang, "status.nooled") + " " + text
+		displayText = tr(lang, "status.nooled") + " " + displayText
+	}
+	// 0 means "no gain set" (announce.go treats it as 100%); leave the input
+	// empty so the placeholder shows instead of a misleading literal 0.
+	var announceVol any
+	if p.cfg.AnnounceVolume > 0 {
+		announceVol = p.cfg.AnnounceVolume
 	}
 	return Manifest{
 		Title:  "Afvalwijzer",
@@ -58,23 +65,41 @@ func (p *Plugin) manifestLocked() Manifest {
 		Sections: []Section{
 			{
 				Title: tr(lang, "section.address"),
-				Text:  text,
+				Text:  tr(lang, "section.text"),
 				Fields: []Field{
-					{Key: "provider", Label: tr(lang, "field.provider"), Type: "text", Value: p.cfg.Provider},
-					{Key: "postcode", Label: tr(lang, "field.postcode"), Type: "text", Value: p.cfg.Postcode},
-					{Key: "houseNumber", Label: tr(lang, "field.housenumber"), Type: "text", Value: p.cfg.HouseNumber},
-					{Key: "suffix", Label: tr(lang, "field.suffix"), Type: "text", Value: p.cfg.Suffix},
+					{Key: "provider", Label: tr(lang, "field.provider"), Type: "text", Value: p.cfg.Provider, Placeholder: "mijnafvalwijzer"},
+					{Key: "postcode", Label: tr(lang, "field.postcode"), Type: "text", Value: p.cfg.Postcode, Placeholder: "1234AB"},
+					{Key: "houseNumber", Label: tr(lang, "field.housenumber"), Type: "text", Value: p.cfg.HouseNumber, Placeholder: "12"},
+					{Key: "suffix", Label: tr(lang, "field.suffix"), Type: "text", Value: p.cfg.Suffix, Placeholder: "A"},
+				},
+			},
+			{
+				Title: tr(lang, "section.display"),
+				Text:  displayText,
+				Fields: []Field{
 					{Key: "enabled", Label: tr(lang, "field.enabled"), Type: "toggle", Value: p.cfg.Enabled},
 					{Key: "alwaysShow", Label: tr(lang, "field.alwaysshow"), Type: "toggle", Value: p.cfg.AlwaysShow},
-					{Key: "announceTimes", Label: tr(lang, "field.announcetimes"), Type: "text", Value: p.cfg.AnnounceTimes},
-					{Key: "announceVolume", Label: tr(lang, "field.announcevolume"), Type: "number", Value: p.cfg.AnnounceVolume},
 				},
+				Actions: []Action{
+					{ID: "test", Label: tr(lang, "action.test")},
+					{ID: "clear", Label: tr(lang, "action.clear")},
+				},
+			},
+			{
+				Title: tr(lang, "section.announce"),
+				Text:  tr(lang, "text.announce"),
+				Fields: []Field{
+					{Key: "announceTimes", Label: tr(lang, "field.announcetimes"), Type: "text", Value: p.cfg.AnnounceTimes, Placeholder: "08:00, 18:00"},
+					{Key: "announceVolume", Label: tr(lang, "field.announcevolume"), Type: "number", Value: announceVol, Placeholder: "100"},
+				},
+				Actions: []Action{
+					{ID: "announce", Label: tr(lang, "action.announce")},
+				},
+			},
+			{
 				Actions: []Action{
 					{ID: "save", Label: tr(lang, "action.save"), Style: "primary"},
 					{ID: "refresh", Label: tr(lang, "action.refresh")},
-					{ID: "test", Label: tr(lang, "action.test")},
-					{ID: "announce", Label: tr(lang, "action.announce")},
-					{ID: "clear", Label: tr(lang, "action.clear")},
 				},
 			},
 		},
