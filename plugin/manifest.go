@@ -69,11 +69,14 @@ func (p *Plugin) manifestLocked() Manifest {
 	if !p.hasOLED {
 		displayText = tr(lang, "status.nooled") + " " + displayText
 	}
-	// 0 means "no gain set"; announce.go plays that at defaultAnnounceVolume,
-	// so the slider starts at the effective value.
+	// 0 means "no level set"; announce.go plays that at defaultAnnounceVolume,
+	// so the slider starts at the effective value. Clamp into the /speaker window
+	// so an old config's out-of-range value doesn't land past the slider max.
 	announceVol := p.cfg.AnnounceVolume
 	if announceVol <= 0 {
 		announceVol = defaultAnnounceVolume
+	} else if announceVol > 70 {
+		announceVol = 70
 	}
 	return Manifest{
 		Title:  "Afvalwijzer",
@@ -109,7 +112,7 @@ func (p *Plugin) manifestLocked() Manifest {
 					// Value as a string: save() round-trips inputs through str(),
 					// which only reads strings — and the old text renderer shows
 					// it the same way.
-					{Key: "announceVolume", Label: tr(lang, "field.announcevolume"), Type: "slider", Value: strconv.Itoa(announceVol), Min: 10, Max: 100, Step: 5, Unit: "%"},
+					{Key: "announceVolume", Label: tr(lang, "field.announcevolume"), Type: "slider", Value: strconv.Itoa(announceVol), Min: 10, Max: 70, Step: 5, Unit: "%"},
 				},
 				Actions: []Action{
 					{ID: "announce", Label: tr(lang, "action.announce")},

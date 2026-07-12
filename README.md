@@ -11,10 +11,10 @@ ReTouch plugin that shows the next Dutch waste pickup on a SoundTouch 20 OLED an
   pickup day itself ("Vandaag wordt … opgehaald") and the day before ("Morgen wordt
   …"); from 18:00 the display rolls over to the next pickup day. The "always show"
   toggle shows the next pickup days ahead instead.
-- Spoken announcements at configured times (e.g. `08:00,18:30`) via Google TTS through
-  the firmware's ducked `/playNotification` — music keeps playing and resumes by
-  itself. `/playNotification` plays at a fixed firmware level, so the announce volume
-  is a gain percentage baked into the clip (100 = TTS loudness, 0 = 100).
+- Spoken announcements at configured times (e.g. `08:00,18:30`) via Google TTS,
+  played through ReTouch's audio-notification API (`POST /api/speaker/notify`, which
+  drives the firmware's ducked `/speaker` endpoint) — music keeps playing and resumes
+  by itself. The announce volume is the `/speaker` level (10–70; 0 = default 30).
 - UI + display texts are translated (en/nl/de/fr/es/af), following ReTouch's language.
 - On models without the ST20 panel ReTouch reports the display as unavailable and
   the plugin never sends content (dates and announcements still work).
