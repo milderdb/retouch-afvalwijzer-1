@@ -1,38 +1,28 @@
 package plugin
 
 // Spoken announcements at configured times. At each HH:MM in the config the
-// plugin speaks the same sentence the OLED shows (via Google Translate TTS,
-// decoded to the headerless 48 kHz stereo s16le PCM the firmware's
-// /playNotification plays — the same format retouch-ring's chimes use). The
-// firmware ducks whatever is playing and resumes it afterwards, so music
-// keeps playing.
+// plugin speaks the same sentence the OLED shows. It hands ReTouch the Google
+// Translate TTS URL (POST /api/speaker/notify), and ReTouch drives the firmware's
+// /speaker endpoint, which fetches and plays the clip — ducking whatever is
+// playing and resuming it afterwards, so music keeps going.
 //
-// /playNotification plays at a FIXED firmware level: the speaker's master
-// volume does not attenuate it. Loudness is therefore baked into the PCM as
-// gain (AnnounceVolume, percent; 100 = as spoken by the TTS). The TTS clip
-// at that fixed level is loud; unset defaults to a gentler 30%.
+// /speaker has a native volume (10–70), so loudness is just a request parameter;
+// unset defaults to a gentle 30.
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
-	"hash/fnv"
-	"io"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
-
-	mp3 "github.com/hajimehoshi/go-mp3"
 )
 
-const announceRate = 48000 // /playNotification format: s16le, 48 kHz, stereo
-
-// defaultAnnounceVolume is the gain used when none is configured (0). The
-// firmware plays notifications at a fixed, fairly loud level; 30% is a
-// comfortable indoor default.
+// defaultAnnounceVolume is the volume used when none is configured (0). 30 (of
+// the firmware's 10–70 window) is a comfortable indoor default.
 const defaultAnnounceVolume = 30
 
 var announceMu sync.Mutex
@@ -106,8 +96,7 @@ func containsTime(times, hhmm string) bool {
 	return false
 }
 
-// announce speaks the pickup sentence through the speaker's ducked
-// notification playback.
+// announce speaks the pickup sentence through ReTouch's audio-notification API.
 func (p *Plugin) announce(pick Pickup) error {
 	announceMu.Lock()
 	defer announceMu.Unlock()
@@ -118,53 +107,39 @@ func (p *Plugin) announce(pick Pickup) error {
 	if vol <= 0 {
 		vol = defaultAnnounceVolume
 	}
-
 	text := pickupSentence(pick, time.Now(), lang)
-	pcm, err := p.ttsPCM(text, lang, vol)
-	if err != nil {
-		return fmt.Errorf("tts: %w", err)
-	}
-	path := filepath.Join(filepath.Dir(p.cfgPath), "announce.pcm")
-	if err := os.WriteFile(path, pcm, 0o644); err != nil {
-		return err
-	}
-	return p.playNotification(path)
+	return p.speak(text, lang, vol)
 }
 
-// ttsPCM fetches spoken text from Google Translate TTS (MP3) and converts it
-// to the firmware's PCM format with the gain baked in. Results are cached per
-// sentence+volume next to the config.
-func (p *Plugin) ttsPCM(text, lang string, vol int) ([]byte, error) {
-	// The readable part is truncated, so a short hash keeps distinct long
-	// sentences from colliding onto the same cache file.
-	key := fmt.Sprintf("%s-%d-%s", lang, vol, text)
-	h := fnv.New32a()
-	_, _ = h.Write([]byte(key))
-	cache := filepath.Join(filepath.Dir(p.cfgPath), fmt.Sprintf("tts-%s-%08x.pcm", sanitize(key), h.Sum32()))
-	if b, err := os.ReadFile(cache); err == nil && len(b) > 0 {
-		return b, nil
+// ttsURL builds the Google Translate TTS URL for text; the firmware fetches it.
+func ttsURL(text, lang string) string {
+	return "https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=" +
+		url.QueryEscape(ttsLang(lang)) + "&q=" + url.QueryEscape(text)
+}
+
+// speak asks ReTouch to play spoken text: it POSTs the TTS URL to
+// /api/speaker/notify, and ReTouch's firmware fetches and plays it at vol.
+func (p *Plugin) speak(text, lang string, vol int) error {
+	if p.hostURL == "" {
+		return fmt.Errorf("no ReTouch host URL configured")
 	}
-	u := "https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=" + url.QueryEscape(ttsLang(lang)) + "&q=" + url.QueryEscape(text)
-	req, _ := http.NewRequestWithContext(p.ctx, "GET", u, nil)
-	req.Header.Set("User-Agent", "Mozilla/5.0")
+	body, _ := json.Marshal(map[string]any{
+		"url":    ttsURL(text, lang),
+		"volume": vol,
+		"artist": "Afvalwijzer",
+		"track":  text,
+	})
+	req, _ := http.NewRequestWithContext(p.ctx, "POST", p.hostURL+"/api/speaker/notify", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 	resp, err := p.http.Do(req)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("tts status %d", resp.StatusCode)
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("speaker notify status %d", resp.StatusCode)
 	}
-	mp3Body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
-	if err != nil {
-		return nil, err
-	}
-	pcm, err := mp3ToSpeakerPCM(mp3Body, float64(vol)/100)
-	if err != nil {
-		return nil, err
-	}
-	_ = os.WriteFile(cache, pcm, 0o644) // best-effort cache
-	return pcm, nil
+	return nil
 }
 
 func ttsLang(lang string) string {
@@ -173,84 +148,4 @@ func ttsLang(lang string) string {
 		return lang
 	}
 	return "en"
-}
-
-var sanitizeRe = regexp.MustCompile(`[^a-zA-Z0-9]+`)
-
-func sanitize(s string) string {
-	s = sanitizeRe.ReplaceAllString(s, "-")
-	if len(s) > 60 {
-		s = s[:60]
-	}
-	return strings.Trim(s, "-")
-}
-
-// mp3ToSpeakerPCM decodes MP3 (go-mp3 always outputs 16-bit stereo at the
-// source rate) and linearly resamples to the firmware's 48 kHz stereo s16le,
-// applying gain with clipping. /playNotification plays at a fixed level, so
-// gain in the samples is the only volume control there is.
-func mp3ToSpeakerPCM(data []byte, gain float64) ([]byte, error) {
-	dec, err := mp3.NewDecoder(strings.NewReader(string(data)))
-	if err != nil {
-		return nil, err
-	}
-	raw, err := io.ReadAll(dec)
-	if err != nil {
-		return nil, err
-	}
-	src := dec.SampleRate()
-	if src <= 0 {
-		return nil, fmt.Errorf("bad sample rate")
-	}
-	n := len(raw) / 4 // stereo frames
-	if n == 0 {
-		return nil, fmt.Errorf("empty audio")
-	}
-	sample := func(frame, ch int) float64 {
-		i := frame*4 + ch*2
-		return float64(int16(uint16(raw[i]) | uint16(raw[i+1])<<8))
-	}
-	outN := int(int64(n) * announceRate / int64(src))
-	out := make([]byte, outN*4)
-	for i := 0; i < outN; i++ {
-		pos := float64(i) * float64(src) / float64(announceRate)
-		j := int(pos)
-		frac := pos - float64(j)
-		j2 := j + 1
-		if j >= n {
-			j = n - 1
-		}
-		if j2 >= n {
-			j2 = n - 1
-		}
-		for ch := 0; ch < 2; ch++ {
-			v := (sample(j, ch)*(1-frac) + sample(j2, ch)*frac) * gain
-			if v > 32767 {
-				v = 32767
-			} else if v < -32768 {
-				v = -32768
-			}
-			s := int16(v)
-			out[i*4+ch*2] = byte(uint16(s))
-			out[i*4+ch*2+1] = byte(uint16(s) >> 8)
-		}
-	}
-	return out, nil
-}
-
-// playNotification triggers the firmware's ducked playback of a local PCM
-// file — music resumes by itself afterwards.
-func (p *Plugin) playNotification(path string) error {
-	body := `<audioSource pathToFile="` + path + `"/>`
-	req, _ := http.NewRequestWithContext(p.ctx, "POST", "http://"+p.speaker+"/playNotification", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/xml")
-	resp, err := p.http.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 300 {
-		return fmt.Errorf("playNotification status %d", resp.StatusCode)
-	}
-	return nil
 }

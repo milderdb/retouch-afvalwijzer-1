@@ -25,8 +25,8 @@ type Config struct {
 	// AnnounceTimes are HH:MM clock times (comma-separated) at which the pickup
 	// sentence is spoken through the speaker; empty disables announcements.
 	AnnounceTimes string `json:"announceTimes"`
-	// AnnounceVolume is a gain percentage baked into the spoken clip
-	// (100 = TTS loudness); /playNotification plays at a fixed firmware level.
+	// AnnounceVolume is the /speaker playback level for the spoken clip
+	// (10–70; 0 = defaultAnnounceVolume).
 	AnnounceVolume int `json:"announceVolume"`
 }
 
