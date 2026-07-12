@@ -109,7 +109,7 @@ func (p *Plugin) manifestLocked() Manifest {
 					// Value as a string: save() round-trips inputs through str(),
 					// which only reads strings — and the old text renderer shows
 					// it the same way.
-					{Key: "announceVolume", Label: tr(lang, "field.announcevolume"), Type: "slider", Value: strconv.Itoa(announceVol), Min: 10, Max: 200, Step: 5, Unit: "%"},
+					{Key: "announceVolume", Label: tr(lang, "field.announcevolume"), Type: "slider", Value: strconv.Itoa(announceVol), Min: 10, Max: 100, Step: 5, Unit: "%"},
 				},
 				Actions: []Action{
 					{ID: "announce", Label: tr(lang, "action.announce")},
