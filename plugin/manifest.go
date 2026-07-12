@@ -1,6 +1,9 @@
 package plugin
 
-import "time"
+import (
+	"strconv"
+	"time"
+)
 
 type Manifest struct {
 	Title    string    `json:"title"`
@@ -27,6 +30,12 @@ type Field struct {
 	Value       any      `json:"value,omitempty"`
 	Placeholder string   `json:"placeholder,omitempty"`
 	Options     []Option `json:"options,omitempty"` // for type "select"
+	// For type "slider". Older ReTouch hosts render unknown field types as a
+	// text input, so the field degrades to the previous free-form number.
+	Min  int    `json:"min,omitempty"`
+	Max  int    `json:"max,omitempty"`
+	Step int    `json:"step,omitempty"`
+	Unit string `json:"unit,omitempty"`
 }
 
 // Option is one choice of a select field.
@@ -60,11 +69,11 @@ func (p *Plugin) manifestLocked() Manifest {
 	if !p.hasOLED {
 		displayText = tr(lang, "status.nooled") + " " + displayText
 	}
-	// 0 means "no gain set" (announce.go treats it as 100%); leave the input
-	// empty so the placeholder shows instead of a misleading literal 0.
-	var announceVol any
-	if p.cfg.AnnounceVolume > 0 {
-		announceVol = p.cfg.AnnounceVolume
+	// 0 means "no gain set"; announce.go plays that at defaultAnnounceVolume,
+	// so the slider starts at the effective value.
+	announceVol := p.cfg.AnnounceVolume
+	if announceVol <= 0 {
+		announceVol = defaultAnnounceVolume
 	}
 	return Manifest{
 		Title:  "Afvalwijzer",
@@ -96,8 +105,11 @@ func (p *Plugin) manifestLocked() Manifest {
 				Title: tr(lang, "section.announce"),
 				Text:  tr(lang, "text.announce"),
 				Fields: []Field{
-					{Key: "announceTimes", Label: tr(lang, "field.announcetimes"), Type: "text", Value: p.cfg.AnnounceTimes, Placeholder: "08:00, 18:00"},
-					{Key: "announceVolume", Label: tr(lang, "field.announcevolume"), Type: "number", Value: announceVol, Placeholder: "100"},
+					{Key: "announceTimes", Label: tr(lang, "field.announcetimes"), Type: "times", Value: p.cfg.AnnounceTimes, Placeholder: "08:00, 18:00"},
+					// Value as a string: save() round-trips inputs through str(),
+					// which only reads strings — and the old text renderer shows
+					// it the same way.
+					{Key: "announceVolume", Label: tr(lang, "field.announcevolume"), Type: "slider", Value: strconv.Itoa(announceVol), Min: 10, Max: 100, Step: 5, Unit: "%"},
 				},
 				Actions: []Action{
 					{ID: "announce", Label: tr(lang, "action.announce")},

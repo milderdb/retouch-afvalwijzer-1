@@ -179,7 +179,7 @@ func (p *Plugin) save(v map[string]any) error {
 		AlwaysShow:  boolish(v["alwaysShow"]),
 
 		AnnounceTimes:  normalizeTimes(str(v["announceTimes"])),
-		AnnounceVolume: atoiDefault(str(v["announceVolume"]), 0),
+		AnnounceVolume: clampVolume(atoiDefault(str(v["announceVolume"]), 0)),
 	}
 	if cfg.Postcode == "" || cfg.HouseNumber == "" {
 		return fmt.Errorf("%s", tr(lang, "err.required"))

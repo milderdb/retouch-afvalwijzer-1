@@ -53,3 +53,18 @@ func shortType(s string) string {
 	}
 	return s
 }
+
+// clampVolume bounds a configured announce gain to the slider's 10–100% range;
+// 0 stays 0 ("unset", played at defaultAnnounceVolume).
+func clampVolume(v int) int {
+	if v <= 0 {
+		return 0
+	}
+	if v < 10 {
+		return 10
+	}
+	if v > 100 {
+		return 100
+	}
+	return v
+}
