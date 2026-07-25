@@ -22,6 +22,7 @@ type displayContent struct {
 	Owner   string `json:"owner,omitempty"`
 	Icon    string `json:"icon"`
 	Text    string `json:"text"`
+	Large   bool   `json:"large,omitempty"`
 	Seconds int    `json:"seconds,omitempty"`
 }
 
@@ -66,7 +67,7 @@ func (p *Plugin) probeDisplay() bool {
 func (p *Plugin) syncDisplay(pick Pickup, show bool, lang string, now time.Time) {
 	var want string
 	if show {
-		want = iconFor(pick.Type) + "\x00" + pickupSentence(pick, now, lang)
+		want = iconFor(pick.Type) + "\x00" + pickupDisplayText(pick, now, lang)
 	}
 	p.mu.Lock()
 	changed := want != p.lastShown || (want != "" && now.Sub(p.lastSync) > 5*time.Minute)
@@ -83,13 +84,13 @@ func (p *Plugin) syncDisplay(pick Pickup, show bool, lang string, now time.Time)
 		return
 	}
 	parts := strings.SplitN(want, "\x00", 2)
-	_ = p.displayCall("PUT", "/api/display/standby", &displayContent{Owner: displayOwner, Icon: parts[0], Text: parts[1]})
+	_ = p.displayCall("PUT", "/api/display/standby", &displayContent{Owner: displayOwner, Icon: parts[0], Text: parts[1], Large: true})
 }
 
 // notifyDisplay shows content immediately (test action).
 func (p *Plugin) notifyDisplay(pick Pickup, lang string) error {
 	return p.displayCall("POST", "/api/display/notify", &displayContent{
-		Icon: iconFor(pick.Type), Text: pickupSentence(pick, time.Now(), lang), Seconds: 8,
+		Icon: iconFor(pick.Type), Text: pickupDisplayText(pick, time.Now(), lang), Seconds: 8, Large: true,
 	})
 }
 
@@ -147,5 +148,20 @@ func pickupSentence(p Pickup, now time.Time, lang string) string {
 		return tr(lang, "sentence.tomorrow", name)
 	default:
 		return tr(lang, "sentence.later", name, p.Date.Format("02-01"))
+	}
+}
+
+// pickupDisplayText returns a short two-word string for the OLED large layout,
+// e.g. "Groenafval morgen" or "Groenafval op 30-07". The core renders it 2×
+// scaled and wraps at 10 characters so it fits on two lines.
+func pickupDisplayText(p Pickup, now time.Time, lang string) string {
+	name := wasteName(p, lang)
+	switch daysAhead(p.Date, now) {
+	case 0:
+		return tr(lang, "display.today", name)
+	case 1:
+		return tr(lang, "display.tomorrow", name)
+	default:
+		return tr(lang, "display.later", name, p.Date.Format("02-01"))
 	}
 }
